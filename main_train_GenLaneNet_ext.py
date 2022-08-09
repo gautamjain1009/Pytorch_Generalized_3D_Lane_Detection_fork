@@ -11,7 +11,7 @@ synthetic dataset for 3D lane detection proposed in the above paper.
 Author: Yuliang Guo (33yuliangguo@gmail.com)
 Date: March, 2020
 """
-
+import sys
 import numpy as np
 import torch
 import torch.optim
@@ -26,6 +26,11 @@ from dataloader.Load_Data_3DLane_ext import *
 from networks import Loss_crit, GeoNet3D_ext, erfnet
 from tools.utils import *
 from tools import eval_3D_lane
+sys.path.insert(1,"/home/ims-robotics/Documents/gautam/E2E_3DLane_AuxNet")
+
+#build import for custom 2d lane detection models
+from models.build_model import load_model
+from utils.config import Config
 
 
 def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
@@ -87,7 +92,14 @@ def train_net():
     valid_set_labels = [json.loads(line) for line in open(val_gt_file).readlines()]
 
     # Define network
-    model1 = erfnet.ERFNet(args.num_class)
+    """"
+    Define my own 2d models here
+    
+    """
+    model1 = load_model(cfg, baseline = args.baseline, pretrained = True)
+
+
+    # model1 = erfnet.ERFNet(args.num_class)
     model2 = GeoNet3D_ext.Net(args, input_dim=args.num_class - 1)
     define_init_weights(model2, args.weight_init)
 
@@ -99,7 +111,10 @@ def train_net():
     # load in vgg pretrained weights
     checkpoint = torch.load(args.pretrained_feat_model)
     # args.start_epoch = checkpoint['epoch']
-    model1 = load_my_state_dict(model1, checkpoint['state_dict'])
+
+    ############# ENABLE IF IN CASE WANT TO TRAIN WITH ERFNet
+    # model1 = load_my_state_dict(model1, checkpoint['state_dict'])
+    
     model1.eval()  # do not back propagate to model1
 
     # Define optimizer and scheduler
@@ -225,7 +240,8 @@ def train_net():
             optimizer.zero_grad()
             # Inference model
             try:
-                output1 = model1(input, no_lane_exist=True)
+                # output1 = model1(input, no_lane_exist=True)
+                output1 = model1(input)
                 with torch.no_grad():
                     # output1 = F.softmax(output1, dim=1)
                     output1 = output1.softmax(dim=1)
@@ -353,7 +369,8 @@ def validate(loader, dataset, model1, model2, criterion, vs_saver, val_gt_file, 
                     model2.update_projection(args, gt_hcam, gt_pitch)
                 # Inference model
                 try:
-                    output1 = model1(input, no_lane_exist=True)
+                    # output1 = model1(input, no_lane_exist=True)
+                    output1 = model1(input)
                     # output1 = F.softmax(output1, dim=1)
                     output1 = output1.softmax(dim=1)
                     output1 = output1 / torch.max(torch.max(output1, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
@@ -458,12 +475,22 @@ if __name__ == '__main__':
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
     global args
+    
     parser = define_args()
     args = parser.parse_args()
 
+    #CLI arg for loading config for building 2D models
+    # parser.add_argument('--config', help = 'path of train config file')
+    # parser.add_argument("--baseline", type=bool, default=False, help="enable baseline")
+
+    global cfg
+    args.config = "/home/ims-robotics/Documents/gautam/Pytorch_Generalized_3D_Lane_Detection_fork/Configs/scnn_res18_culane.py"
+    cfg = Config.fromfile(args.config)
+    
+
     # dataset_name: 'standard' / 'rare_subset' / 'illus_chg'
     args.dataset_name = 'illus_chg'
-    args.dataset_dir = '/media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
+    args.dataset_dir = '/home/ims-robotics/Documents/gautam/dataset/Apollo_Sim_3D_Lane_Release/'
     args.data_dir = ops.join('data_splits', args.dataset_name)
     args.save_path = ops.join('data_splits', args.dataset_name)
 
@@ -476,8 +503,8 @@ if __name__ == '__main__':
 
     # define the network model
     args.num_class = 2  # 1 background + n lane labels
-    args.pretrained_feat_model = 'pretrained/erfnet_model_sim3d.tar'
-    args.mod = 'Gen_LaneNet_ext'
+    args.pretrained_feat_model = cfg.pretrained_2dmodel_path
+    args.mod = 'Gen_LaneNet_ext_' + cfg.train_run_name
     args.y_ref = 5  # new anchor prefer closer range gt assign
     global crit_string
     crit_string = 'loss_gflat'

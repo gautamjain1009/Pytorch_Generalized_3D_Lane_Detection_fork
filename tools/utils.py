@@ -87,7 +87,10 @@ def define_args():
     parser.add_argument('--save_freq', type=int, default=500, help='padding')
     # Skip batch
     parser.add_argument('--list', type=int, nargs='+', default=[954, 2789], help='Images you want to skip')
-
+    
+    # #Loading configs for custom image segmentation models
+    parser.add_argument('--config', help = 'path of train config file')
+    parser.add_argument("--baseline", type=bool, default=False, help="enable baseline")
     return parser
 
 
